@@ -7,11 +7,17 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"strings"
+	"text/template"
 
 	"github.com/a-h/gemini"
 )
+
+type Params = map[string]string
+type RouteFunction func(w gemini.ResponseWriter, r RequestParams)
 
 type User struct {
 	Certificate     *x509.Certificate
@@ -19,18 +25,19 @@ type User struct {
 	CertificateHash string
 }
 
-type Handler struct {
+type Router struct {
 	routes []Route
 }
 
 type RequestParams struct {
-	Path string
-	User *User
+	Req    *gemini.Request
+	Params Params
+	User   *User
 }
 
-type HandlerMatch struct {
-	Handler Handler
-	Params  map[string]string
+type RouterMatch struct {
+	Router Router
+	Params Params
 }
 
 type RoutePart struct {
@@ -39,14 +46,15 @@ type RoutePart struct {
 }
 
 type Route struct {
-	parts []RoutePart
+	parts   []RoutePart
+	handler RouteFunction
 }
 
-func NewHandler(routes ...Route) Handler {
-	return Handler{routes}
+func NewRouter(routes ...Route) Router {
+	return Router{routes}
 }
 
-func NewRoute(path string) Route {
+func NewRoute(path string, fn RouteFunction) Route {
 	raws := strings.Split(strings.Trim(path, "/"), "/")
 	parts := []RoutePart{}
 	for _, raw := range raws {
@@ -62,7 +70,7 @@ func NewRoute(path string) Route {
 			})
 		}
 	}
-	return Route{parts}
+	return Route{parts, fn}
 }
 
 func (r Route) Match(path string) (map[string]string, bool) {
@@ -82,20 +90,28 @@ func (r Route) Match(path string) (map[string]string, bool) {
 	return params, true
 }
 
-func (h Handler) ServeGemini(w gemini.ResponseWriter, r *gemini.Request) {
-	log.Println(r.URL.Path)
-	log.Println(h.routes)
-	for _, route := range h.routes {
-		params, ok := route.Match(r.URL.Path)
-		if !ok {
+func (r Router) ServeGemini(w gemini.ResponseWriter, rq *gemini.Request) {
+	for _, route := range r.routes {
+		params, match := route.Match(rq.URL.Path)
+		if !match {
 			continue
 		}
-		log.Println(params)
-		w.Write([]byte("hello"))
+
+		user, err := getUser(rq.Certificate)
+		if err != nil {
+			log.Println(err)
+			w.SetHeader(gemini.CodeTemporaryFailure, "internal server error")
+			return
+		}
+		route.handler(w, RequestParams{
+			User:   user,
+			Params: params,
+			Req:    rq,
+		})
 		return
 	}
 
-	w.SetHeader(gemini.CodeNotFound, "not found")
+	w.SetHeader(gemini.CodeNotFound, "path not found")
 }
 
 func hash(data string) string {
@@ -120,22 +136,59 @@ func getUser(c gemini.Certificate) (*User, error) {
 	}, nil
 }
 
+func name(u *User) string {
+	if u == nil {
+		return "anonymous"
+	}
+	return u.CommonName
+}
+
+func render(w io.Writer, templateName string, data interface{}) error {
+	path := fmt.Sprintf("templates/%s.md", templateName)
+	raw, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	parsed, err := template.New(templateName).Parse(string(raw))
+	if err != nil {
+		return err
+	}
+	err = parsed.Execute(w, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func renderFunc(templateName string, handler func(RequestParams) interface{}) RouteFunction {
+	return func(w gemini.ResponseWriter, r RequestParams) {
+		data := handler(r)
+		err := render(w, templateName, data)
+		if err != nil {
+			log.Println(err)
+			w.SetHeader(gemini.CodeTemporaryFailure, "internal server error")
+			return
+		}
+	}
+}
+
 func main() {
 	cert, err := tls.LoadX509KeyPair("localhost.crt", "localhost.key")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	h := NewHandler(
-		NewRoute("/"),
-		NewRoute("/foo/:bar"),
+	router := NewRouter(
+		NewRoute("/", renderFunc("home", func(r RequestParams) interface{} {
+			return map[string]string{"Name": name(r.User)}
+		})),
+
+		NewRoute("/foo/:bar", renderFunc("foo", func(r RequestParams) interface{} {
+			return map[string]string{"Name": name(r.User), "Bar": r.Params["bar"]}
+		})),
 	)
 
-	r := NewRoute("/foo/:bar")
-	fmt.Println(r)
-	fmt.Println(r.Match("/foo/quux"))
-
-	domain := gemini.NewDomainHandler("localhost", cert, h)
+	domain := gemini.NewDomainHandler("localhost", cert, router)
 	err = gemini.ListenAndServe(context.Background(), ":1965", domain)
 	if err != nil {
 		log.Fatal("error:", err)
