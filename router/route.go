@@ -6,15 +6,15 @@ import (
 	"github.com/a-h/gemini"
 )
 
-type RouteFunction func(w gemini.ResponseWriter, r RequestParams)
+type RouteFunction func(w gemini.ResponseWriter, r Request)
 
 type Route struct {
 	parts   []RoutePart
 	handler RouteFunction
 }
 
-func NewRoute(path string, fn RouteFunction) Route {
-	raws := strings.Split(strings.Trim(path, "/"), "/")
+func NewRoute(pattern string, fn RouteFunction) Route {
+	raws := strings.Split(strings.Trim(pattern, "/"), "/")
 	parts := []RoutePart{}
 	for _, raw := range raws {
 		if strings.HasPrefix(raw, ":") {

@@ -22,10 +22,11 @@ type RoutePart struct {
 	Matcher bool
 }
 
-type RequestParams struct {
-	Req         *gemini.Request
+type Request struct {
+	Raw         *gemini.Request
 	PathParams  Params
 	QueryParams Params
+	QueryString string
 	User        *user.User
 }
 
@@ -49,11 +50,12 @@ func (r Router) ServeGemini(w gemini.ResponseWriter, rq *gemini.Request) {
 			w.SetHeader(gemini.CodeTemporaryFailure, "internal server error")
 			return
 		}
-		route.handler(w, RequestParams{
+		route.handler(w, Request{
 			User:        user,
 			PathParams:  pathParams,
 			QueryParams: queryParams,
-			Req:         rq,
+			QueryString: rq.URL.RawQuery,
+			Raw:         rq,
 		})
 		return
 	}
