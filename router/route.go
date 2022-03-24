@@ -33,7 +33,7 @@ func NewRoute(pattern string, fn RouteFunction) Route {
 }
 
 func (r Route) Match(path string) (map[string]string, bool) {
-	raws := strings.Split(strings.Trim(path, "/"), "/")
+	raws := strings.Split(strings.TrimLeft(path, "/"), "/")
 	if len(raws) != len(r.parts) {
 		return nil, false
 	}
