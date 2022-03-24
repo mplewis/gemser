@@ -62,7 +62,7 @@ func main() {
 		})),
 
 		router.NewRoute("/foo/:bar", renderFunc("foo", func(r router.RequestParams) interface{} {
-			return map[string]string{"Name": name(r.User), "Bar": r.Params["bar"]}
+			return map[string]string{"Name": name(r.User), "Bar": r.PathParams["bar"]}
 		})),
 	)
 

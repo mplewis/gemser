@@ -2,6 +2,7 @@ package router
 
 import (
 	"log"
+	"net/url"
 
 	"github.com/a-h/gemini"
 	"github.com/mplewis/gemser/user"
@@ -22,9 +23,10 @@ type RoutePart struct {
 }
 
 type RequestParams struct {
-	Req    *gemini.Request
-	Params Params
-	User   *user.User
+	Req         *gemini.Request
+	PathParams  Params
+	QueryParams Params
+	User        *user.User
 }
 
 type Params = map[string]string
@@ -35,11 +37,12 @@ func NewRouter(routes ...Route) Router {
 
 func (r Router) ServeGemini(w gemini.ResponseWriter, rq *gemini.Request) {
 	for _, route := range r.routes {
-		params, match := route.Match(rq.URL.Path)
+		pathParams, match := route.Match(rq.URL.Path)
 		if !match {
 			continue
 		}
 
+		queryParams := flattenQueryParams(rq.URL.Query())
 		user, err := user.Get(rq.Certificate)
 		if err != nil {
 			log.Println(err)
@@ -47,12 +50,21 @@ func (r Router) ServeGemini(w gemini.ResponseWriter, rq *gemini.Request) {
 			return
 		}
 		route.handler(w, RequestParams{
-			User:   user,
-			Params: params,
-			Req:    rq,
+			User:        user,
+			PathParams:  pathParams,
+			QueryParams: queryParams,
+			Req:         rq,
 		})
 		return
 	}
 
 	w.SetHeader(gemini.CodeNotFound, "path not found")
+}
+
+func flattenQueryParams(raw url.Values) Params {
+	params := Params{}
+	for k, v := range raw {
+		params[k] = v[0]
+	}
+	return params
 }
