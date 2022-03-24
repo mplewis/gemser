@@ -54,6 +54,10 @@ var _ = Describe("gemser", func() {
 					match:  true,
 					params: map[string]string{"next": "/some/very/long/path"},
 				},
+				{
+					path:  "/input",
+					match: false,
+				},
 			},
 		}
 
