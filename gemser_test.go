@@ -36,10 +36,30 @@ var _ = Describe("gemser", func() {
 				{path: "/users/mplewis/", match: false},
 				{path: "/", match: false},
 			},
+			"/users/:name/posts/:id/comments": []expectation{
+				{
+					path:   "/users/mplewis/posts/123/comments",
+					match:  true,
+					params: map[string]string{"name": "mplewis", "id": "123"},
+				},
+			},
+			"/input/*next": []expectation{
+				{
+					path:   "/input/home",
+					match:  true,
+					params: map[string]string{"next": "/home"},
+				},
+				{
+					path:   "/input/some/very/long/path",
+					match:  true,
+					params: map[string]string{"next": "/some/very/long/path"},
+				},
+			},
 		}
 
 		for pattern, expectations := range specs {
-			route := router.NewRoute(pattern, dummy)
+			route, err := router.NewRoute(pattern, dummy)
+			Expect(err).NotTo(HaveOccurred())
 			for _, expectation := range expectations {
 				expectation := expectation
 				matchStr := "matches"

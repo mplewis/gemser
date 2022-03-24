@@ -17,11 +17,6 @@ type RouterMatch struct {
 	Params Params
 }
 
-type RoutePart struct {
-	Key     string
-	Matcher bool
-}
-
 type Request struct {
 	Raw         *gemini.Request
 	PathParams  Params

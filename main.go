@@ -50,32 +50,39 @@ func renderFunc(templateName string, handler func(router.Request) interface{}) r
 	}
 }
 
-func main() {
-	cert, err := tls.LoadX509KeyPair("localhost.crt", "localhost.key")
+func check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func main() {
+	cert, err := tls.LoadX509KeyPair("localhost.crt", "localhost.key")
+	check(err)
+
+	home, err := router.NewRoute("/", renderFunc("home", func(r router.Request) interface{} {
+		return map[string]string{"Name": name(r.User)}
+	}))
+	check(err)
+
+	foo, err := router.NewRoute("/foo/:bar", renderFunc("foo", func(r router.Request) interface{} {
+		return map[string]string{"Name": name(r.User), "Bar": r.PathParams["bar"]}
+	}))
+	check(err)
+
+	input, err := router.NewRoute("/input/:next", func(w gemini.ResponseWriter, r router.Request) {
+		if r.QueryString != "" {
+			w.SetHeader(gemini.CodeRedirect, r.PathParams["next"])
+			return
+		}
+		w.SetHeader(gemini.CodeInput, "input requested")
+	})
+	check(err)
 
 	router := router.NewRouter(
-		router.NewRoute("/", renderFunc("home", func(r router.Request) interface{} {
-			return map[string]string{"Name": name(r.User)}
-		})),
-
-		router.NewRoute("/foo/:bar", renderFunc("foo", func(r router.Request) interface{} {
-			return map[string]string{"Name": name(r.User), "Bar": r.PathParams["bar"]}
-		})),
-
-		router.NewRoute("/greet", func(w gemini.ResponseWriter, r router.Request) {
-
-		}),
-
-		router.NewRoute("/input/:next", func(w gemini.ResponseWriter, r router.Request) {
-			if r.QueryString != "" {
-				w.SetHeader(gemini.CodeRedirect, r.PathParams["next"])
-				return
-			}
-			w.SetHeader(gemini.CodeInput, "input requested")
-		}),
+		home,
+		foo,
+		input,
 	)
 
 	domain := gemini.NewDomainHandler("localhost", cert, router)
