@@ -60,29 +60,21 @@ func main() {
 	cert, err := tls.LoadX509KeyPair("localhost.crt", "localhost.key")
 	check(err)
 
-	home, err := router.NewRoute("/", renderFunc("home", func(r router.Request) interface{} {
-		return map[string]string{"Name": name(r.User)}
-	}))
-	check(err)
-
-	foo, err := router.NewRoute("/foo/:bar", renderFunc("foo", func(r router.Request) interface{} {
-		return map[string]string{"Name": name(r.User), "Bar": r.PathParams["bar"]}
-	}))
-	check(err)
-
-	input, err := router.NewRoute("/input/:next", func(w gemini.ResponseWriter, r router.Request) {
-		if r.QueryString != "" {
-			w.SetHeader(gemini.CodeRedirect, r.PathParams["next"])
-			return
-		}
-		w.SetHeader(gemini.CodeInput, "input requested")
-	})
-	check(err)
-
 	router := router.NewRouter(
-		home,
-		foo,
-		input,
+		router.NewMustRoute("/", renderFunc("home", func(r router.Request) interface{} {
+			return map[string]string{"Name": name(r.User)}
+		})),
+		router.NewMustRoute("/foo/:bar", renderFunc("foo", func(r router.Request) interface{} {
+			return map[string]string{"Name": name(r.User), "Bar": r.PathParams["bar"]}
+		})),
+		router.NewMustRoute("/input/*next", func(w gemini.ResponseWriter, r router.Request) {
+			if r.QueryString != "" {
+				dest := fmt.Sprintf("%s?input=%s", r.PathParams["next"], r.QueryString)
+				w.SetHeader(gemini.CodeRedirect, dest)
+				return
+			}
+			w.SetHeader(gemini.CodeInput, "input requested")
+		}),
 	)
 
 	domain := gemini.NewDomainHandler("localhost", cert, router)

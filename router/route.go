@@ -52,6 +52,14 @@ func NewRoute(pattern string, fn RouteFunction) (Route, error) {
 	return route, nil
 }
 
+func NewMustRoute(pattern string, fn RouteFunction) Route {
+	route, err := NewRoute(pattern, fn)
+	if err != nil {
+		panic(err)
+	}
+	return route
+}
+
 func (r Route) Match(path string) (map[string]string, bool) {
 	raws := strings.Split(strings.TrimLeft(path, "/"), "/")
 	if r.endsInSplat {
